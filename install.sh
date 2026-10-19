@@ -98,6 +98,13 @@ for _ in $(seq 1 24); do
 done
 [ -n "$BOT" ] || fail "The bot didn't start. Check the token, then run the install command again."
 ok "bot $BOT"
+# Privacy mode on = the bot sees commands but not messages. Don't go on until it's off.
+privacy_off() { P "cd $PROD_DIR && docker compose exec -T bot node -e 'fetch(\"https://api.telegram.org/bot\"+process.env.TELEGRAM_BOT_TOKEN+\"/getMe\").then(r=>r.json()).then(j=>console.log(j.result.can_read_all_group_messages))'" 2>/dev/null | grep -q true; }
+until privacy_off; do
+  echo "   Your bot can't read group messages yet. In @BotFather send /setprivacy, choose your bot, choose Disable."
+  read -r -p "   Press Enter when done... " _ </dev/tty
+done
+ok "the bot can read group messages"
 CODE=$(shuf -i 1000-9999 -n 1)
 as_user "cd $WORK_DIR && bash psql.sh -Atq -c \"insert into ops.bot_state (key, value) values ('setup_code', '$CODE') on conflict (key) do update set value = excluded.value\"" \
   || fail "Couldn't save the setup code."

@@ -213,6 +213,14 @@ async function trySetup(msg) {
         `I save every message, voice note, photo and file sent here, and work on what you ask. ` +
         `${owner} is my owner: when something needs a decision, I'll ask here, usually with buttons to tap.\n\n` +
         `Everything stays on your own servers. Send /help to see how it works.`}, 'update')`;
+  if (!me.can_read_all_group_messages) {
+    // Privacy mode on: commands arrive, ordinary messages don't. The commonest setup slip.
+    await sql`
+      insert into ops.bot_outbox (tg_chat_id, body, kind) values (${msg.chat.id},
+        ${"One more step: I can only see commands, not your messages. In @BotFather send " +
+          "/setprivacy, choose this bot, choose Disable - then remove me from this group and add me again."},
+        'question')`;
+  }
   log(`setup done: chat ${chatId}, owner ${msg.from?.id}`);
   return true;
 }

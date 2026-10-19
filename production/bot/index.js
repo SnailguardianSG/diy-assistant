@@ -31,15 +31,32 @@ if (!TOKEN) {
 const sql = postgres(process.env.DATABASE_URL, { max: 3, idle_timeout: 20 });
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
+/**
+ * One Bot API call. A connection error ("fetch failed": often a reused
+ * connection Telegram had already closed) is retried twice, after 1 s and 3 s;
+ * the error logged includes the underlying cause. Telegram's own refusals
+ * (ok: false) are not retried here.
+ */
 async function api(method, params) {
-  const r = await fetch(`${API}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(params ?? {}),
-  });
-  const j = await r.json();
-  if (!j.ok) throw new Error(`${method}: ${j.description}`);
-  return j.result;
+  for (let attempt = 1; ; attempt++) {
+    let r;
+    try {
+      r = await fetch(`${API}/${method}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(params ?? {}),
+      });
+    } catch (err) {
+      const why = `${err.message}${err.cause ? ` (${err.cause.code ?? err.cause.message})` : ""}`;
+      if (attempt >= 3) throw new Error(`${method}: ${why}`);
+      log(`${method}: ${why} - retrying`);
+      await new Promise((res) => setTimeout(res, attempt === 1 ? 1000 : 3000));
+      continue;
+    }
+    const j = await r.json();
+    if (!j.ok) throw new Error(`${method}: ${j.description}`);
+    return j.result;
+  }
 }
 
 async function state(key) {

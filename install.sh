@@ -112,12 +112,15 @@ cat <<'TXT'
      3. Copy the token BotFather gave you (it looks like 123456789:AAH...).
 TXT
 TOKEN=""
-until [[ "$TOKEN" == *:* ]]; do
+if P "cd $PROD_DIR && grep -q '^TELEGRAM_BOT_TOKEN=.*:' .env"; then
+  echo "   The bot's token is already set - keeping it."; TOKEN=keep
+fi
+until [[ "$TOKEN" == *:* || "$TOKEN" == keep ]]; do
   TOKEN=$(ask_secret "Paste the bot token")
   [[ "$TOKEN" == *:* ]] || echo "   That doesn't look like a bot token (no colon). Try again."
 done
 # The token travels on stdin, never as a command argument (those show up in process lists).
-printf '%s\n' "$TOKEN" | P "cd $PROD_DIR && grep -v '^TELEGRAM_BOT_TOKEN=' .env > .env.tmp; mv .env.tmp .env; read -r t; echo \"TELEGRAM_BOT_TOKEN=\$t\" >> .env; chmod 600 .env"
+[ "$TOKEN" = keep ] || printf '%s\n' "$TOKEN" | P "cd $PROD_DIR && grep -v '^TELEGRAM_BOT_TOKEN=' .env > .env.tmp; mv .env.tmp .env; read -r t; echo \"TELEGRAM_BOT_TOKEN=\$t\" >> .env; chmod 600 .env"
 unset TOKEN
 P "cd $PROD_DIR && docker compose up -d --build >/dev/null 2>&1"
 BOT=""
@@ -134,9 +137,14 @@ until privacy_off; do
   read -r -p "   Press Enter when done... " _ </dev/tty
 done
 ok "the bot can read group messages"
-CODE=$(shuf -i 1000-9999 -n 1)
-as_user "cd $WORK_DIR && bash psql.sh -Atq -c \"insert into ops.bot_state (key, value) values ('setup_code', '$CODE') on conflict (key) do update set value = excluded.value\"" \
-  || fail "Couldn't save the setup code."
+# A setup code only until the bot has an owner (a re-run must not open a new one).
+OWNER=$(as_user "cd $WORK_DIR && bash psql.sh -Atq -c \"select value from ops.bot_state where key = 'owner_tg_user_id'\"" || true)
+CODE=""
+if [ -z "$OWNER" ]; then
+  CODE=$(shuf -i 1000-9999 -n 1)
+  as_user "cd $WORK_DIR && bash psql.sh -Atq -c \"insert into ops.bot_state (key, value) values ('setup_code', '$CODE') on conflict (key) do update set value = excluded.value\"" \
+    || fail "Couldn't save the setup code."
+fi
 
 say "Step 6 of 8: logging in to Claude"
 if [ ! -x "$HOME_DIR/.local/bin/claude" ]; then
@@ -193,6 +201,9 @@ systemctl is-active --quiet diy-assistant.service || fail "The assistant didn't 
 ok "assistant running"
 
 printf '\n\033[1;32m   All done!\033[0m\n\n'
+if [ -z "$CODE" ]; then
+  echo "   Updated. Your bot already has an owner - nothing to do in Telegram."; exit 0
+fi
 cat <<TXT
    Now, in Telegram:
      1. Create a group and add your bot $BOT

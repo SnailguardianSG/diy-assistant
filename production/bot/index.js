@@ -234,7 +234,8 @@ async function handleButton(cq) {
   const who = nameOf(cq.from);
   const [c] = await sql`
     update ops.choice set chosen = ${n}, chosen_by = ${who}, chosen_at = now()
-    where id = ${id} and chosen is null returning question, options->>(${Number(n) - 1}) as option`;
+    where id = ${id} and chosen is null
+    returning question, options->>(${Number(n) - 1}::int) as option`;   // ::int: an array index, not a key
   if (!c) return answer("Already answered.");
   // A tap has no message of its own; a negative id keeps the note unique.
   await sql`

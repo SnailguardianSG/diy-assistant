@@ -163,6 +163,19 @@ TXT
   as_user "cd $WORK_DIR && timeout 120 ~/.local/bin/claude -p 'Reply with the single word ready.' 2>/dev/null" | grep -qi ready \
     || fail "Claude isn't logged in yet. Run the install command again to retry."
 fi
+# Trust the assistant's folder, or Claude ignores its .claude/settings.json and
+# every script needs an approval the worker can't give (found in the rehearsal:
+# the trust question at login is easy to miss). Installing it here is the owner
+# trusting it.
+python3 - "$HOME_DIR/.claude.json" "$WORK_DIR" <<'PYTRUST'
+import json, sys
+path, work = sys.argv[1], sys.argv[2]
+try: d = json.load(open(path))
+except (FileNotFoundError, ValueError): d = {}
+d.setdefault("projects", {}).setdefault(work, {})["hasTrustDialogAccepted"] = True
+json.dump(d, open(path, "w"), indent=2)
+PYTRUST
+chown "$USER_NAME:$USER_NAME" "$HOME_DIR/.claude.json"
 ok "Claude is ready"
 
 say "Step 7 of 8: voice-to-text (downloads about 1.6 GB - takes a few minutes)"

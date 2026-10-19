@@ -35,6 +35,8 @@ wake_ai() {
 }
 
 log "worker started"
+RETRY_AFTER=600                       # still waiting 10 min after a run: try again
+last_run=0
 read -r P0 S0 <<<"$(state)"
 case "$S0" in READY*) wake_ai "waiting at start"; read -r P0 S0 <<<"$(state)" ;; esac
 last=0
@@ -44,9 +46,13 @@ while true; do
   if [ -n "$P" ]; then
     work=
     [ "$P" != "$P0" ] && work="/process"
-    case "$S" in READY*) [ "$S" != "$S0" ] && work="group went quiet" ;; WAIT:0:*) S0="" ;; esac
+    case "$S" in
+      READY*) if [ "$S" != "$S0" ]; then work="group went quiet"
+              elif [ $((now - last_run)) -ge $RETRY_AFTER ]; then work="still waiting - trying again"; fi ;;
+      WAIT:0:*) S0="" ;;
+    esac
     if [ -n "$work" ]; then
-      wake_ai "$work"
+      wake_ai "$work"; last_run=$(date +%s)
       # What is still waiting now counts as seen; a new message wakes it again.
       read -r P0 S0 <<<"$(state)"
     fi

@@ -58,20 +58,49 @@ if ! as_user "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking
     || fail "Couldn't log in to $PROD_ADDR. Check the address and password, then run the install command again."
   unset PROD_PW
 fi
-as_user "ssh -o BatchMode=yes root@$PROD_ADDR true" || fail "Couldn't connect to $PROD_ADDR."
-printf 'PROD_SSH=root@%s\nPROD_DIR=%s\n' "$PROD_ADDR" "$PROD_DIR" > "$WORK_DIR/prod.env"
+# One shared SSH connection to production, kept open and reused by every command
+# (installer, worker, scripts). Hosts like ReadyServer rate-limit SSH (ufw LIMIT:
+# ~6 new connections in 30 s, then refused), and the worker checks every 15 s.
+mkdir -p "$HOME_DIR/.ssh"
+python3 - "$HOME_DIR/.ssh/config" "$PROD_ADDR" <<'PYCFG'
+import re, sys
+path, addr = sys.argv[1], sys.argv[2]
+try: s = open(path).read()
+except FileNotFoundError: s = ""
+s = re.sub(r"# diy-assistant production\nHost prod\n(?:  [^\n]*\n)*", "", s)
+s += ("# diy-assistant production\nHost prod\n  HostName %s\n  User root\n"
+      "  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking accept-new\n"
+      "  ControlMaster auto\n  ControlPath ~/.ssh/cm-%%C\n  ControlPersist 10m\n"
+      "  ServerAliveInterval 30\n" % addr)
+open(path, "w").write(s)
+PYCFG
+chown "$USER_NAME:$USER_NAME" "$HOME_DIR/.ssh/config"; chmod 600 "$HOME_DIR/.ssh/config"
+sleep 31                              # let the host's rate limit forget the logins above
+as_user "ssh -o BatchMode=yes prod true" || fail "Couldn't connect to $PROD_ADDR."
+printf 'PROD_SSH=prod\nPROD_DIR=%s\n' "$PROD_DIR" > "$WORK_DIR/prod.env"
 chown "$USER_NAME:$USER_NAME" "$WORK_DIR/prod.env"
 ok "connected to $PROD_ADDR"
 # Run a command on the production server. The command string is passed to ssh as
 # one argument, so the production server's shell - not this one - reads it.
-P() { sudo -u "$USER_NAME" -H ssh -o BatchMode=yes "root@$PROD_ADDR" "$*"; }
+P() {
+  local i
+  for i in 1 2 3; do
+    sudo -u "$USER_NAME" -H ssh -o BatchMode=yes prod "$*" && return 0
+    [ $? -ne 255 ] && return 1          # the command failed, not the connection
+    echo "   (connection dropped - retrying in 30 s)"; sleep 30
+  done
+  return 1
+}
 
 say "Step 4 of 8: setting up the production server (a few minutes)"
 P 'command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh >/dev/null 2>&1'
-P 'command -v ufw >/dev/null && { ufw allow OpenSSH >/dev/null; ufw --force enable >/dev/null; } || true'
+# Firewall: SSH from this work server always allowed; everyone else rate-limited.
+P 'if command -v ufw >/dev/null; then ip=${SSH_CLIENT%% *};
+     ufw insert 1 allow from "$ip" to any port 22 proto tcp >/dev/null 2>&1 || ufw allow from "$ip" to any port 22 proto tcp >/dev/null;
+     ufw limit 22/tcp >/dev/null; ufw --force enable >/dev/null; fi'
 P "mkdir -p $PROD_DIR/data/feedback"
 sudo -u "$USER_NAME" -H rsync -a --exclude .env --exclude data -e "ssh -o BatchMode=yes" \
-  "$SRC/production/" "root@$PROD_ADDR:$PROD_DIR/" || fail "Couldn't copy the bot's files to $PROD_ADDR."
+  "$SRC/production/" "prod:$PROD_DIR/" || fail "Couldn't copy the bot's files to $PROD_ADDR."
 P "cd $PROD_DIR && touch .env && chmod 600 .env && (grep -q '^DB_PASSWORD=' .env || echo DB_PASSWORD=\$(openssl rand -hex 24) >> .env)"
 ok "Docker, firewall and the bot's files are ready"
 

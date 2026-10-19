@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash dump-queue.sh)",
+      "Bash(bash dump-queue.sh:*)",
+      "Bash(bash transcribe.sh:*)",
+      "Bash(bash say.sh:*)",
+      "Bash(bash ask.sh:*)",
+      "Bash(bash choose.sh:*)",
+      "Bash(bash close.sh:*)",
+      "Edit(./workspace/**)",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "deny": [
+      "Bash(bash psql.sh:*)",
+      "Bash(bash on-prod.sh:*)",
+      "Read(./prod.env)",
+      "Read(~/.ssh/**)",
+      "Read(~/.claude/**)"
+    ]
+  }
+}

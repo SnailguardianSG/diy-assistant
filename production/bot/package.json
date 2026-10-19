@@ -1,0 +1,10 @@
+{
+  "name": "diy-assistant-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram assistant bot. Node 22 has fetch built in, so the Bot API needs no wrapper library.",
+  "dependencies": {
+    "postgres": "3.4.8"
+  }
+}

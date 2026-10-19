@@ -1,0 +1,6 @@
+.env
+prod.env
+data/
+logs/
+workspace/
+__pycache__/

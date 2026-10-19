@@ -1,0 +1,51 @@
+# DIY Assistant - production server: the Telegram bot and its database.
+# No open ports: the bot connects out to Telegram, and the work server reaches
+# the database through `docker compose exec` over SSH.
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: assistant
+      POSTGRES_USER: assistant
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?the installer writes .env}
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Runs once, on an empty database.
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assistant -d assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 512M}
+
+  bot:
+    build: ./bot
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://assistant:${DB_PASSWORD}@db:5432/assistant
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      MEDIA_DIR: /data/feedback
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [internal, edge]
+    volumes:
+      - ./data/feedback:/data/feedback
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 256M}
+
+networks:
+  internal:
+    internal: true
+  edge:
+
+volumes:
+  db-data:

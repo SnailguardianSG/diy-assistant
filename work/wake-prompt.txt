@@ -1,0 +1,7 @@
+New messages are waiting in the Telegram group. Follow CLAUDE.md:
+1. Run `bash dump-queue.sh` to see what is waiting.
+2. Transcribe every voice note with `bash transcribe.sh <file>`, and look at every photo or file, before deciding what a message means.
+3. For each request: do it (work in workspace/), or, if you need a decision, ask with `bash choose.sh` (buttons) or `bash ask.sh` (a question under that message).
+4. Reply in the group with `bash say.sh`, in plain words.
+5. Close every note with `bash close.sh <id> done|quiet|wont "<text>"`, unless it is waiting on an answer.
+Stop when every note is closed or waiting on an answer.

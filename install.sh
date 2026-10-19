@@ -149,7 +149,9 @@ if ! as_user "cd $WORK_DIR && timeout 120 ~/.local/bin/claude -p 'Reply with the
    When you see Claude's prompt, type /exit and press Enter.
 TXT
   read -r -p "   Press Enter to open Claude... " _ </dev/tty
-  sudo -u "$USER_NAME" -H bash -c "cd $WORK_DIR && ~/.local/bin/claude" </dev/tty >/dev/tty 2>&1 || true
+  # su, not sudo: Ubuntu 24.04's sudo runs commands in its own pseudo-terminal
+  # (use_pty), which swallowed keys in Claude's full-screen login (rehearsal).
+  su - "$USER_NAME" -c "cd $WORK_DIR && ~/.local/bin/claude" </dev/tty >/dev/tty 2>&1 || true
   as_user "cd $WORK_DIR && timeout 120 ~/.local/bin/claude -p 'Reply with the single word ready.' 2>/dev/null" | grep -qi ready \
     || fail "Claude isn't logged in yet. Run the install command again to retry."
 fi

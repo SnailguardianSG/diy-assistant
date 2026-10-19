@@ -11,8 +11,10 @@
 -- queue as a note, which wakes the worker to carry on.
 -- =====================================================================
 
--- Buttons and mentions on outgoing messages (Telegram's own formats).
-ALTER TABLE ops.bot_outbox ADD COLUMN buttons jsonb, ADD COLUMN entities jsonb;
+-- Buttons and mentions on outgoing messages (Telegram's own formats), and
+-- retrying a send that failed because the network or Telegram was briefly down.
+ALTER TABLE ops.bot_outbox ADD COLUMN buttons jsonb, ADD COLUMN entities jsonb,
+  ADD COLUMN attempts int NOT NULL DEFAULT 0, ADD COLUMN retry_at timestamptz;
 
 CREATE TABLE ops.choice (
   id          bigserial PRIMARY KEY,

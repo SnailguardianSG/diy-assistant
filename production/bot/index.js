@@ -258,7 +258,7 @@ async function outboxLoop() {
     try {
       const rows = await sql`
         with claimed as (
-          select id from ops.bot_outbox where status = 'pending'
+          select id from ops.bot_outbox where status = 'pending' and (retry_at is null or retry_at <= now())
           order by created_at, id limit 5 for update skip locked)
         update ops.bot_outbox o set status = 'sent', sent_at = now()
         from claimed c where c.id = o.id
@@ -284,8 +284,21 @@ async function outboxLoop() {
           await sql`update ops.bot_outbox set sent_message_id = ${sent.message_id} where id = ${m.id}`;
           log(`sent ${m.kind} #${m.id}`);
         } catch (err) {
-          await sql`update ops.bot_outbox set status = 'failed', error = ${err.message} where id = ${m.id}`;
-          log(`send failed #${m.id}: ${err.message}`);
+          // The network or Telegram briefly down (or "too many requests"): try again later,
+          // waiting 2 s, 4 s, 8 s ... up to 5 minutes, for up to about a day. Anything else
+          // Telegram refuses (a bad request) is marked failed.
+          const transient = /fetch failed|network|timed? ?out|ECONN|EAI_AGAIN|socket|Too Many Requests|Bad Gateway|Service Unavailable/i
+            .test(`${err.message} ${err.cause?.code ?? ""}`);
+          const [r] = await sql`select attempts from ops.bot_outbox where id = ${m.id}`;
+          if (transient && (r?.attempts ?? 0) < 300) {
+            const wait = Math.min(2 ** ((r?.attempts ?? 0) + 1), 300);
+            await sql`update ops.bot_outbox set status = 'pending', attempts = attempts + 1, error = ${err.message},
+                        retry_at = now() + make_interval(secs => ${wait}) where id = ${m.id}`;
+            log(`send #${m.id} will retry in ${wait}s: ${err.message}`);
+          } else {
+            await sql`update ops.bot_outbox set status = 'failed', error = ${err.message} where id = ${m.id}`;
+            log(`send failed #${m.id}: ${err.message}`);
+          }
         }
       }
     } catch (err) {

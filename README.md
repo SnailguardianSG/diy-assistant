@@ -21,10 +21,12 @@ Made by **Snailguardian**. Free to use for yourself and your own business (see t
    curl -fsSL https://raw.githubusercontent.com/SnailguardianSG/diy-assistant/main/install.sh | bash
    ```
 
-3. Answer its questions: the production server's address and password, your bot's token from
-   @BotFather (it shows you how), and the Claude login.
-4. At the end it shows a **setup code**. In Telegram, create a group, add your bot (open the
-   bot's profile -> its name -> Add to Group), and send `/setup <code>`. You're the owner.
+3. Answer its questions: the production server's address and password, and your bot's token
+   from @BotFather (it shows you how).
+4. When it shows a **setup code**: in Telegram, create a group, add your bot (open the bot's
+   profile -> its name -> Add to Group), and send `/setup <code>`. You're the owner.
+5. Log in to Claude: the bot sends the login link to your group - tap it, approve, and paste the
+   code it shows back into Termius.
 
 The step-by-step guide with screenshots and video: *(link coming)*.
 
@@ -40,7 +42,7 @@ servers in ReadyServer. Your Claude plan is billed by Anthropic.
 
 ## Rather not do this yourself?
 Snailguardian's **do-it-for-you** service sets it up and runs it for you - you just reply in
-Telegram. *(contact details)*
+Telegram. Email **contact@snailguardian.com**.
 
 ## Licence
 Snailguardian Free-Use Licence 1.0 - free for yourself and your own business; no reselling it

@@ -30,13 +30,13 @@ exec > >(tee -a "$LOG") 2>&1          # a log of what happened (no passwords or 
 . /etc/os-release
 [ "${VERSION_ID:-}" = "24.04" ] || echo "   Note: tested on Ubuntu 24.04; this is ${PRETTY_NAME:-unknown}."
 
-say "Step 1 of 8: installing the basic tools (a few minutes)"
+say "Step 1 of 9: installing the basic tools (a few minutes)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl rsync ffmpeg python3-venv sshpass jq openssl ca-certificates >/dev/null
 ok "tools installed"
 
-say "Step 2 of 8: getting the assistant"
+say "Step 2 of 9: getting the assistant"
 id "$USER_NAME" >/dev/null 2>&1 || useradd -m -s /bin/bash "$USER_NAME"
 if [ -n "${KIT_DIR:-}" ]; then SRC=$KIT_DIR; else
   SRC=$(mktemp -d); git clone -q --depth 1 "$KIT_REPO" "$SRC"; fi
@@ -47,7 +47,7 @@ chown -R "$USER_NAME:$USER_NAME" "$WORK_DIR"
 [ -f "$HOME_DIR/.ssh/id_ed25519" ] || as_user "ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519"
 ok "assistant files in $WORK_DIR"
 
-say "Step 3 of 8: connecting to your production server"
+say "Step 3 of 9: connecting to your production server"
 echo "   Use the production server's address and root password from ReadyServer."
 PROD_ADDR=$(ask "Production server address (e.g. 203.0.113.10)")
 [ -n "$PROD_ADDR" ] || fail "No address given."
@@ -92,7 +92,7 @@ P() {
   return 1
 }
 
-say "Step 4 of 8: setting up the production server (a few minutes)"
+say "Step 4 of 9: setting up the production server (a few minutes)"
 P 'command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh >/dev/null 2>&1'
 # Firewall: SSH from this work server always allowed; everyone else rate-limited.
 P 'if command -v ufw >/dev/null; then ip=${SSH_CLIENT%% *};
@@ -104,7 +104,7 @@ sudo -u "$USER_NAME" -H rsync -a --exclude .env --exclude data -e "ssh -o BatchM
 P "cd $PROD_DIR && touch .env && chmod 600 .env && (grep -q '^DB_PASSWORD=' .env || echo DB_PASSWORD=\$(openssl rand -hex 24) >> .env)"
 ok "Docker, firewall and the bot's files are ready"
 
-say "Step 5 of 8: your Telegram bot"
+say "Step 5 of 9: your Telegram bot"
 cat <<'TXT'
    In Telegram, open @BotFather (blue tick):
      1. Send /newbot, then a name, then a username ending in "bot".
@@ -146,20 +146,59 @@ if [ -z "$OWNER" ]; then
     || fail "Couldn't save the setup code."
 fi
 
-say "Step 6 of 8: logging in to Claude"
+say "Step 6 of 9: your Telegram group"
+if [ -n "$CODE" ]; then
+  cat <<TXT
+   In Telegram:
+     1. Create a group (you can add your team later).
+     2. Add your bot $BOT - open the bot's profile, tap its name, then Add to Group.
+     3. In the group, send:
+
+            /setup $CODE
+
+   Waiting for that message...
+TXT
+  until [ -n "$(as_user "cd $WORK_DIR && bash psql.sh -Atq -c \"select value from ops.bot_state where key = 'owner_tg_user_id'\"" 2>/dev/null)" ]; do
+    sleep 3
+  done
+fi
+ok "your group is set up, and you're the bot's owner"
+
+say "Step 7 of 9: logging in to Claude"
 if [ ! -x "$HOME_DIR/.local/bin/claude" ]; then
   as_user 'curl -fsSL https://claude.ai/install.sh | bash' >/dev/null 2>&1 || fail "Couldn't install Claude."
 fi
 if ! as_user "cd $WORK_DIR && timeout 120 ~/.local/bin/claude -p 'Reply with the single word ready.' 2>/dev/null" | grep -qi ready; then
   cat <<'TXT'
-   Claude opens next. Log in with your Claude account (follow the link it shows,
-   then paste the code back). If it asks whether to trust this folder, choose Yes.
-   When you see Claude's prompt, type /exit and press Enter.
+   Claude opens next:
+     1. Choose a text style (press Enter).
+     2. Choose to log in with your Claude account (subscription).
+     3. The login link is sent to your Telegram group as one link - tap it there,
+        approve, copy the code it shows, and paste it here in Termius.
+     4. If it asks whether to trust this folder, choose Yes.
+     5. When you see Claude's prompt, type /exit and press Enter.
 TXT
   read -r -p "   Press Enter to open Claude... " _ </dev/tty
+  # The login link wraps over many lines on a phone and copies broken (rehearsal).
+  # So the login screen is recorded (script), the link is found in the recording
+  # (login-link.py) and the bot sends it to the group as one tappable link.
+  LOGIN_REC=/tmp/diy-claude-login.rec
+  rm -f "$LOGIN_REC"; install -o "$USER_NAME" -m 600 /dev/null "$LOGIN_REC"
+  ( for _ in $(seq 1 450); do
+      sleep 2
+      link=$(python3 "$WORK_DIR/login-link.py" "$LOGIN_REC" 2>/dev/null)
+      if [ -n "$link" ]; then
+        as_user "cd $WORK_DIR && bash say.sh 'Claude login for the installer: tap this link, approve, then copy the code it shows and paste it into Termius. (Only for the person installing.)
+
+$link'" >/dev/null 2>&1
+        break
+      fi
+    done ) & LINKER=$!
   # su, not sudo: Ubuntu 24.04's sudo runs commands in its own pseudo-terminal
   # (use_pty), which swallowed keys in Claude's full-screen login (rehearsal).
-  su - "$USER_NAME" -c "cd $WORK_DIR && ~/.local/bin/claude" </dev/tty >/dev/tty 2>&1 || true
+  su - "$USER_NAME" -c "cd $WORK_DIR && script -q -f -c ~/.local/bin/claude $LOGIN_REC" </dev/tty >/dev/tty 2>&1 || true
+  kill "$LINKER" 2>/dev/null
+  rm -f "$LOGIN_REC"                  # it holds the login screen
   as_user "cd $WORK_DIR && timeout 120 ~/.local/bin/claude -p 'Reply with the single word ready.' 2>/dev/null" | grep -qi ready \
     || fail "Claude isn't logged in yet. Run the install command again to retry."
 fi
@@ -178,7 +217,7 @@ PYTRUST
 chown "$USER_NAME:$USER_NAME" "$HOME_DIR/.claude.json"
 ok "Claude is ready"
 
-say "Step 7 of 8: voice-to-text (downloads about 1.6 GB - takes a few minutes)"
+say "Step 8 of 9: voice-to-text (downloads about 1.6 GB - takes a few minutes)"
 mkdir -p /opt/assistant/models
 [ -x /opt/assistant/venv/bin/python ] || python3 -m venv /opt/assistant/venv
 /opt/assistant/venv/bin/pip install -q faster-whisper
@@ -188,7 +227,7 @@ mkdir -p /opt/assistant/models
 chmod -R a+rX /opt/assistant
 ok "voice-to-text ready"
 
-say "Step 8 of 8: starting the assistant"
+say "Step 9 of 9: starting the assistant"
 cat > /etc/systemd/system/diy-assistant.service <<EOF
 [Unit]
 Description=DIY Assistant worker
@@ -215,17 +254,7 @@ ok "assistant running"
 
 printf '\n\033[1;32m   All done!\033[0m\n\n'
 if [ -z "$CODE" ]; then
-  echo "   Updated. Your bot already has an owner - nothing to do in Telegram."; exit 0
+  echo "   Updated. Your assistant is running."
+else
+  echo "   Your assistant is ready. Say hello to it in your Telegram group."
 fi
-cat <<TXT
-   Now, in Telegram:
-     1. Create a group and add your bot $BOT
-        (open the bot's profile -> its name -> Add to Group).
-     2. In the group, send:
-
-            /setup $CODE
-
-   The bot introduces itself, and you're its owner. Then just talk to it.
-
-   Your setup code: $CODE
-TXT

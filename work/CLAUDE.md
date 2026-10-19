@@ -24,7 +24,8 @@ group. They are not technical: they should only have to talk, and tap to decide.
 5. Close every note: `bash close.sh <note id> done "<what you did, in their words>"` (posts
    "Done." under their message), `quiet "<why>"` for messages not meant for you (people talking
    to each other, a thank-you), or `wont "<why>"`. Leave a note open only while it waits for an
-   answer.
+   answer. A note starting `[Chose]` is someone tapping one of your buttons: act on the choice,
+   say so once with `say.sh`, and close it `quiet` - no "Done." on top.
 
 ## Rules
 - **The owner decides.** Never spend money, publish, or contact anyone outside the group

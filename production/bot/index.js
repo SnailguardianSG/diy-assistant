@@ -86,6 +86,25 @@ async function download(fileId, suggestedExt) {
   return path;
 }
 
+// /model choices; the worker passes the keys to `claude --model` / `--effort` ("default" = no flag).
+const MODELS = { default: "Default (your Claude plan decides)", sonnet: "Sonnet - quicker, lighter", opus: "Opus - smartest, uses more" };
+const EFFORTS = { default: "Default", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
+
+/** The /model panel: what's set now, and buttons for model and effort. */
+async function modelPanel(note = "") {
+  const model = MODELS[await state("claude_model") ?? "default"] ?? MODELS.default;
+  const effort = EFFORTS[await state("claude_effort") ?? "default"] ?? EFFORTS.default;
+  const e = Object.entries(EFFORTS).map(([k, label]) => ({ text: label, callback_data: `effort:${k}` }));
+  return {
+    text: `${note}AI model: ${model}\nEffort: ${effort}\n\n` +
+          `Opus and higher effort think harder but use up your Claude plan faster; Sonnet and lower ` +
+          `effort are quicker and lighter. Used from the next piece of work. Only the owner can change it.`,
+    reply_markup: { inline_keyboard: [
+      ...Object.entries(MODELS).map(([k, label]) => [{ text: label, callback_data: `model:${k}` }]),
+      e.slice(0, 3), e.slice(3) ] },
+  };
+}
+
 const nameOf = (u) => [u?.first_name, u?.last_name].filter(Boolean).join(" ") || u?.username || "someone";
 
 /** Turn one Telegram message into a queue note. */
@@ -193,11 +212,16 @@ async function handleCommand(msg) {
     await reply("Flagged. If the assistant is online it picks this up within a minute; otherwise it waits, nothing is lost.");
     return true;
   }
+  if (/^\/model\b/.test(text)) {
+    await api("sendMessage", { chat_id: chatId, reply_to_message_id: msg.message_id, ...(await modelPanel()) });
+    return true;
+  }
   if (/^\/(start|help)\b/.test(text)) {
     await reply(
       "Send a message, a voice note, a photo or a file - say what you want done.\n\n" +
       "Several messages for one request? Send them, then /done.\n\n" +
-      "/done - bundle what you just sent\n/process - work on it now\n/status - the queue");
+      "/done - bundle what you just sent\n/process - work on it now\n/status - the queue\n" +
+      "/model - choose the AI model and effort");
     return true;
   }
   return false;
@@ -245,6 +269,20 @@ async function trySetup(msg) {
 /** A tap on a choice button (004): record it, and queue it as a note. */
 async function handleButton(cq) {
   const answer = (text) => api("answerCallbackQuery", { callback_query_id: cq.id, text }).catch(() => {});
+  const mm = /^(model|effort):(\w+)$/.exec(cq.data ?? "");
+  if (mm && (mm[1] === "model" ? MODELS : EFFORTS)[mm[2]]) {
+    // The model and effort spend the owner's Claude plan, so only the owner picks them.
+    if (String(cq.from?.id) !== (await state("owner_tg_user_id"))) {
+      return answer(`Only ${(await state("owner_tg_name")) ?? "the owner"} can change this.`);
+    }
+    await setState(`claude_${mm[1]}`, mm[2]);
+    await answer("Saved");
+    await api("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id,
+      ...(await modelPanel("✅ Saved.\n")) })
+      .catch((err) => log("could not update the model panel:", err.message));   // e.g. "not modified"
+    log(`${mm[1]} set to ${mm[2]}`);
+    return;
+  }
   const m = /^pick:(\d+):(\d+)$/.exec(cq.data ?? "");
   if (!m) return answer();
   const [, id, n] = m;

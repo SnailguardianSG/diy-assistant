@@ -28,8 +28,15 @@ SQL
 wake_ai() {
   bash sync-media.sh || log "media copy failed"
   ( while sleep 30; do beat; done ) & local beater=$!
-  log "waking the AI ($1)"
-  timeout 1800 claude -p "$(cat wake-prompt.txt)" --output-format text >> logs/ai.log 2>&1
+  # The model and effort the owner picked with /model in the group (none = the plan's default).
+  local model effort flags=()
+  read -r model effort <<<"$(bash psql.sh -Atq -F ' ' -c "select
+      coalesce((select value from ops.bot_state where key = 'claude_model'), 'default'),
+      coalesce((select value from ops.bot_state where key = 'claude_effort'), 'default')" 2>/dev/null)"
+  case "$model" in sonnet|opus) flags+=(--model "$model") ;; esac
+  case "$effort" in low|medium|high|xhigh|max) flags+=(--effort "$effort") ;; esac
+  log "waking the AI ($1) model=${model:-default} effort=${effort:-default}"
+  timeout 1800 claude -p "$(cat wake-prompt.txt)" "${flags[@]}" --output-format text >> logs/ai.log 2>&1
   log "AI finished (exit $?)"
   kill "$beater" 2>/dev/null
 }

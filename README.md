@@ -36,6 +36,8 @@ The step-by-step guide with screenshots and video: *(link coming)*.
 - Just talk: type, or send a voice note. When you're done, it gets to work.
 - Several messages for one request? Send them, then `/done`.
 - `/process` - work on it now · `/status` - what's waiting · `/help`.
+- `/model` - choose the AI model and effort (Opus and higher effort think harder but use your
+  Claude plan faster; Sonnet and lower effort are quicker and lighter). Only the owner can change it.
 - If it's offline, it says so - nothing is lost; it catches up when it's back.
 
 ## Costs, and stopping

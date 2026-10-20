@@ -10,6 +10,12 @@
 # and walks you through logging in to Claude. Safe to run again.
 set -euo pipefail
 
+# Everything runs inside main(), called on the last line: with "curl ... | bash"
+# bash reads the script from the download as it goes, and any command that reads
+# stdin (ssh) would swallow the rest of it - the installer then just stops.
+# Defining main() first makes bash read the whole script before running any of it.
+main() {
+
 KIT_REPO="${KIT_REPO:-https://github.com/SnailguardianSG/diy-assistant.git}"
 USER_NAME=assistant
 HOME_DIR=/home/$USER_NAME
@@ -258,3 +264,6 @@ if [ -z "$CODE" ]; then
 else
   echo "   Your assistant is ready. Say hello to it in your Telegram group."
 fi
+}
+
+main "$@"

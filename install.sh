@@ -224,6 +224,8 @@ chown "$USER_NAME:$USER_NAME" "$HOME_DIR/.claude.json"
 ok "Claude is ready"
 
 say "Step 8 of 9: voice-to-text (downloads about 1.6 GB - takes a few minutes)"
+echo "   Keep Termius open and your phone awake until you see \"All done\"."
+echo "   If it closes, connect again and run the same install command - it carries on."
 mkdir -p /opt/assistant/models
 [ -x /opt/assistant/venv/bin/python ] || python3 -m venv /opt/assistant/venv
 /opt/assistant/venv/bin/pip install -q faster-whisper

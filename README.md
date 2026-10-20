@@ -21,6 +21,8 @@ Made by **Snailguardian**. Free to use for yourself and your own business (see t
    curl -fsSL https://raw.githubusercontent.com/SnailguardianSG/diy-assistant/main/install.sh | bash
    ```
 
+   **Keep Termius open and your phone awake until it says "All done".** If it closes, connect
+   again and paste the same command - it carries on from where it stopped.
 3. Answer its questions: the production server's address and password, and your bot's token
    from @BotFather (it shows you how).
 4. When it shows a **setup code**: in Telegram, create a group, add your bot (open the bot's
